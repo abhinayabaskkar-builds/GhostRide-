@@ -1,5 +1,8 @@
 package com.example.ghostride
 
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+import androidx.room.TypeConverters
 import java.util.UUID
 
 enum class RideTag {
@@ -10,7 +13,10 @@ enum class RideStatus {
     TENTATIVE, ACTIVE, FINALIZING, COMPLETED
 }
 
+@Entity
+@TypeConverters(Converters::class)
 data class Ride(
+    @PrimaryKey
     val id: String = UUID.randomUUID().toString(),
     val driverId: String,
     val vehicleId: String,
