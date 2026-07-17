@@ -23,7 +23,13 @@ data class Ride(
     val driverNameSnapshot: String,
     val vehicleNameSnapshot: String,
     val boardingTime: Long,
+    val boardingLatitude: Double? = null,
+    val boardingLongitude: Double? = null,
     val arrivalTime: Long? = null,
+    val arrivalLatitude: Double? = null,
+    val arrivalLongitude: Double? = null,
+    val durationSeconds: Long? = null,
+    val distanceMeters: Double? = null,
     val rideTag: RideTag = RideTag.UNCLASSIFIED,
     val rideStatus: RideStatus = RideStatus.TENTATIVE
 )
