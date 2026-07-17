@@ -11,12 +11,33 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.lifecycle.lifecycleScope
 import com.example.ghostride.ui.theme.GhostRideTheme
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        val database = GhostRideDatabase.getInstance(applicationContext)
+
+        lifecycleScope.launch {
+            val existingDays = database.workingDayDao().getAllWorkingDays()
+            if (existingDays.isEmpty()) {
+                val defaults = listOf(
+                    WorkingDay(Weekday.MONDAY, true),
+                    WorkingDay(Weekday.TUESDAY, true),
+                    WorkingDay(Weekday.WEDNESDAY, true),
+                    WorkingDay(Weekday.THURSDAY, true),
+                    WorkingDay(Weekday.FRIDAY, true),
+                    WorkingDay(Weekday.SATURDAY, false),
+                    WorkingDay(Weekday.SUNDAY, false)
+                )
+                defaults.forEach { database.workingDayDao().insertWorkingDay(it) }
+            }
+        }
+
         setContent {
             GhostRideTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
