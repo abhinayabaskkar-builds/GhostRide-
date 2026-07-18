@@ -10,6 +10,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.location.Location
 import android.os.IBinder
 import android.util.Log
 import com.google.android.gms.location.ActivityRecognition
@@ -34,6 +35,30 @@ class BluetoothMonitorService : Service() {
 
         suspend fun handleConnect(context: Context, vehicleAddress: String) {
             val database = GhostRideDatabase.getInstance(context)
+
+            val vehicle = database.vehicleDao().getVehicleByBluetoothMac(vehicleAddress)
+            if (vehicle == null) {
+                Log.d(TAG, "No configured vehicle found for address: $vehicleAddress")
+                return
+            }
+
+            // Check if this is a reconnect within the grace period of an existing ride
+            val existingActiveRide = database.rideDao().getActiveRide()
+            if (existingActiveRide != null &&
+                existingActiveRide.vehicleId == vehicle.id &&
+                existingActiveRide.rideStatus == RideStatus.FINALIZING
+            ) {
+                val resumedRide = existingActiveRide.copy(
+                    rideStatus = RideStatus.ACTIVE,
+                    arrivalTime = null,
+                    arrivalLatitude = null,
+                    arrivalLongitude = null
+                )
+                database.rideDao().updateRide(resumedRide)
+                Log.d(TAG, "Reconnected within grace period, resuming ride: ${resumedRide.id}")
+                return
+            }
+
             val today = LocalDate.now().dayOfWeek
             val weekday = todayAsWeekday(today)
             val workingDay = database.workingDayDao().getWorkingDay(weekday)
@@ -44,12 +69,6 @@ class BluetoothMonitorService : Service() {
             }
 
             Log.d(TAG, "Tentative connect on working day: $vehicleAddress. Starting confirmation window...")
-
-            val vehicle = database.vehicleDao().getVehicleByBluetoothMac(vehicleAddress)
-            if (vehicle == null) {
-                Log.d(TAG, "No configured vehicle found for address: $vehicleAddress")
-                return
-            }
 
             val driver = database.driverDao().getDriverById(vehicle.driverId)
             if (driver == null) {
@@ -78,12 +97,15 @@ class BluetoothMonitorService : Service() {
             }
 
             if (motionConfirmed) {
+                val boardingLocation = getCurrentLocationOrNull(context)
                 val ride = Ride(
                     driverId = driver.id,
                     vehicleId = vehicle.id,
                     driverNameSnapshot = driver.name,
                     vehicleNameSnapshot = vehicle.name,
                     boardingTime = connectTime,
+                    boardingLatitude = boardingLocation?.latitude,
+                    boardingLongitude = boardingLocation?.longitude,
                     rideStatus = RideStatus.ACTIVE
                 )
                 database.rideDao().insertRide(ride)
@@ -93,8 +115,97 @@ class BluetoothMonitorService : Service() {
             }
         }
 
-        fun handleDisconnect(vehicleAddress: String) {
-            Log.d(TAG, "Disconnect detected: $vehicleAddress")
+        suspend fun handleDisconnect(context: Context, vehicleAddress: String) {
+            val database = GhostRideDatabase.getInstance(context)
+            val vehicle = database.vehicleDao().getVehicleByBluetoothMac(vehicleAddress)
+            if (vehicle == null) {
+                Log.d(TAG, "Disconnect from unknown vehicle: $vehicleAddress")
+                return
+            }
+
+            val activeRide = database.rideDao().getActiveRide()
+            if (activeRide == null || activeRide.vehicleId != vehicle.id ||
+                activeRide.rideStatus != RideStatus.ACTIVE
+            ) {
+                Log.d(TAG, "Disconnect detected, but no active ride for this vehicle: $vehicleAddress")
+                return
+            }
+
+            Log.d(TAG, "Disconnect detected, starting grace period: $vehicleAddress")
+
+            val tentativeArrivalTime = System.currentTimeMillis()
+            val tentativeLocation = getCurrentLocationOrNull(context)
+
+            val finalizingRide = activeRide.copy(
+                rideStatus = RideStatus.FINALIZING,
+                arrivalTime = tentativeArrivalTime,
+                arrivalLatitude = tentativeLocation?.latitude,
+                arrivalLongitude = tentativeLocation?.longitude
+            )
+            database.rideDao().updateRide(finalizingRide)
+
+            delay(Config.gracePeriodSeconds * 1000)
+
+            val recheckedRide = database.rideDao().getRideById(finalizingRide.id)
+            if (recheckedRide?.rideStatus == RideStatus.FINALIZING) {
+                val duration = if (recheckedRide.arrivalTime != null) {
+                    (recheckedRide.arrivalTime - recheckedRide.boardingTime) / 1000
+                } else null
+
+                val distance = calculateDistanceMeters(
+                    recheckedRide.boardingLatitude, recheckedRide.boardingLongitude,
+                    recheckedRide.arrivalLatitude, recheckedRide.arrivalLongitude
+                )
+
+                val tag = tagRide(recheckedRide.arrivalLatitude, recheckedRide.arrivalLongitude)
+
+                val completedRide = recheckedRide.copy(
+                    rideStatus = RideStatus.COMPLETED,
+                    durationSeconds = duration,
+                    distanceMeters = distance,
+                    rideTag = tag
+                )
+                database.rideDao().updateRide(completedRide)
+                Log.d(
+                    TAG,
+                    "Ride finalized: ${completedRide.id}, duration=${duration}s, distance=${distance}m, tag=$tag"
+                )
+            } else {
+                Log.d(TAG, "Ride reconnected within grace period, no finalization needed: ${finalizingRide.id}")
+            }
+        }
+
+        private fun calculateDistanceMeters(
+            lat1: Double?, lon1: Double?, lat2: Double?, lon2: Double?
+        ): Double? {
+            if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return null
+            val earthRadiusMeters = 6371000.0
+            val dLat = Math.toRadians(lat2 - lat1)
+            val dLon = Math.toRadians(lon2 - lon1)
+            val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                    Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
+                    Math.sin(dLon / 2) * Math.sin(dLon / 2)
+            val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+            return earthRadiusMeters * c
+        }
+
+        private fun tagRide(arrivalLat: Double?, arrivalLon: Double?): RideTag {
+            if (arrivalLat == null || arrivalLon == null) return RideTag.UNCLASSIFIED
+
+            val distanceToOffice = calculateDistanceMeters(
+                arrivalLat, arrivalLon, Config.officeLatitude, Config.officeLongitude
+            )
+            val distanceToHome = calculateDistanceMeters(
+                arrivalLat, arrivalLon, Config.homeLatitude, Config.homeLongitude
+            )
+
+            return when {
+                distanceToOffice != null && distanceToOffice <= Config.geofenceRadiusMeters ->
+                    RideTag.OFFICE_COMMUTE
+                distanceToHome != null && distanceToHome <= Config.geofenceRadiusMeters ->
+                    RideTag.HOME
+                else -> RideTag.UNCLASSIFIED
+            }
         }
 
         private fun todayAsWeekday(day: DayOfWeek): Weekday {
@@ -110,18 +221,22 @@ class BluetoothMonitorService : Service() {
         }
 
         suspend fun getCurrentSpeedMetersPerSecond(context: Context): Float? {
+            return getCurrentLocationOrNull(context)?.speed
+        }
+
+        suspend fun getCurrentLocationOrNull(context: Context): Location? {
             val fusedClient = LocationServices.getFusedLocationProviderClient(context)
             return suspendCancellableCoroutine { continuation ->
                 try {
                     fusedClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
                         .addOnSuccessListener { location ->
-                            continuation.resume(location?.speed)
+                            continuation.resume(location)
                         }
                         .addOnFailureListener {
                             continuation.resume(null)
                         }
                 } catch (e: SecurityException) {
-                    Log.d(TAG, "Location permission not granted, cannot read speed")
+                    Log.d(TAG, "Location permission not granted, cannot read location")
                     continuation.resume(null)
                 }
             }
@@ -166,7 +281,9 @@ class BluetoothMonitorService : Service() {
                 BluetoothDevice.ACTION_ACL_CONNECTED -> {
                     serviceScope.launch { handleConnect(applicationContext, address) }
                 }
-                BluetoothDevice.ACTION_ACL_DISCONNECTED -> handleDisconnect(address)
+                BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
+                    serviceScope.launch { handleDisconnect(applicationContext, address) }
+                }
             }
         }
     }

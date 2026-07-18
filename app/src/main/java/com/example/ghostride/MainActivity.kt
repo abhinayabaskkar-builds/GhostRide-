@@ -145,6 +145,14 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                         },
+                        onSimulateDisconnect = {
+                            lifecycleScope.launch {
+                                BluetoothMonitorService.handleDisconnect(
+                                    applicationContext,
+                                    Config.vehicle1MacAddress
+                                )
+                            }
+                        },
                         onCheckSpeed = {
                             lifecycleScope.launch {
                                 val speed = BluetoothMonitorService.getCurrentSpeedMetersPerSecond(
@@ -155,6 +163,26 @@ class MainActivity : ComponentActivity() {
                         },
                         onStartActivityUpdates = {
                             BluetoothMonitorService.startActivityRecognitionUpdates(applicationContext)
+                        },
+                        onCreateTestActiveRide = {
+                            lifecycleScope.launch {
+                                val vehicle = database.vehicleDao()
+                                    .getVehicleByBluetoothMac(Config.vehicle1MacAddress)
+                                val driver = vehicle?.let { database.driverDao().getDriverById(it.driverId) }
+
+                                if (vehicle != null && driver != null) {
+                                    val testRide = Ride(
+                                        driverId = driver.id,
+                                        vehicleId = vehicle.id,
+                                        driverNameSnapshot = driver.name,
+                                        vehicleNameSnapshot = vehicle.name,
+                                        boardingTime = System.currentTimeMillis() - 300000,
+                                        rideStatus = RideStatus.ACTIVE
+                                    )
+                                    database.rideDao().insertRide(testRide)
+                                    android.util.Log.d("TestSetup", "Created test active ride: ${testRide.id}")
+                                }
+                            }
                         }
                     )
                 }
@@ -167,19 +195,27 @@ class MainActivity : ComponentActivity() {
 fun TestScreen(
     modifier: Modifier = Modifier,
     onSimulateConnect: () -> Unit,
+    onSimulateDisconnect: () -> Unit,
     onCheckSpeed: () -> Unit,
-    onStartActivityUpdates: () -> Unit
+    onStartActivityUpdates: () -> Unit,
+    onCreateTestActiveRide: () -> Unit
 ) {
     Column(modifier = modifier) {
         Text(text = "GhostRide")
         Button(onClick = onSimulateConnect) {
             Text("Simulate Vehicle Connect")
         }
+        Button(onClick = onSimulateDisconnect) {
+            Text("Simulate Vehicle Disconnect")
+        }
         Button(onClick = onCheckSpeed) {
             Text("Check GPS Speed")
         }
         Button(onClick = onStartActivityUpdates) {
             Text("Start Activity Recognition")
+        }
+        Button(onClick = onCreateTestActiveRide) {
+            Text("Create Test Active Ride")
         }
     }
 }
