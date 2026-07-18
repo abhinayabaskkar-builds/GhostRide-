@@ -26,6 +26,7 @@ class MainActivity : ComponentActivity() {
 
     private var bluetoothGranted = false
     private var notificationGranted = false
+    private var locationGranted = false
 
     private val bluetoothPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -39,6 +40,12 @@ class MainActivity : ComponentActivity() {
     ) { isGranted ->
         notificationGranted = isGranted
         maybeStartService()
+    }
+
+    private val locationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        locationGranted = isGranted
     }
 
     private fun maybeStartService() {
@@ -62,11 +69,12 @@ class MainActivity : ComponentActivity() {
                     WorkingDay(Weekday.WEDNESDAY, true),
                     WorkingDay(Weekday.THURSDAY, true),
                     WorkingDay(Weekday.FRIDAY, true),
-                    WorkingDay(Weekday.SATURDAY, isEnabled = true),
+                    WorkingDay(Weekday.SATURDAY, true),
                     WorkingDay(Weekday.SUNDAY, false)
                 )
                 defaults.forEach { database.workingDayDao().insertWorkingDay(it) }
             }
+
             val existingDrivers = database.driverDao().getAllDrivers()
             if (existingDrivers.isEmpty()) {
                 val placeholderDriver = Driver(name = "Test Driver")
@@ -93,12 +101,20 @@ class MainActivity : ComponentActivity() {
             true
         }
 
+        locationGranted = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
         if (!bluetoothGranted) {
             bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
         } else if (!notificationGranted) {
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         } else {
             maybeStartService()
+        }
+
+        if (!locationGranted) {
+            locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
         }
 
         setContent {
@@ -113,6 +129,14 @@ class MainActivity : ComponentActivity() {
                                     Config.vehicle1MacAddress
                                 )
                             }
+                        },
+                        onCheckSpeed = {
+                            lifecycleScope.launch {
+                                val speed = BluetoothMonitorService.getCurrentSpeedMetersPerSecond(
+                                    applicationContext
+                                )
+                                android.util.Log.d("SpeedTest", "Current speed: $speed m/s")
+                            }
                         }
                     )
                 }
@@ -122,11 +146,18 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun TestScreen(modifier: Modifier = Modifier, onSimulateConnect: () -> Unit) {
+fun TestScreen(
+    modifier: Modifier = Modifier,
+    onSimulateConnect: () -> Unit,
+    onCheckSpeed: () -> Unit
+) {
     Column(modifier = modifier) {
         Text(text = "GhostRide")
         Button(onClick = onSimulateConnect) {
             Text("Simulate Vehicle Connect")
+        }
+        Button(onClick = onCheckSpeed) {
+            Text("Check GPS Speed")
         }
     }
 }

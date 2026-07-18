@@ -17,6 +17,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 
 class BluetoothMonitorService : Service() {
 
@@ -76,7 +80,23 @@ class BluetoothMonitorService : Service() {
         fun handleDisconnect(vehicleAddress: String) {
             Log.d(TAG, "Disconnect detected: $vehicleAddress")
         }
-
+        suspend fun getCurrentSpeedMetersPerSecond(context: Context): Float? {
+            val fusedClient = LocationServices.getFusedLocationProviderClient(context)
+            return suspendCancellableCoroutine { continuation ->
+                try {
+                    fusedClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+                        .addOnSuccessListener { location ->
+                            continuation.resume(location?.speed)
+                        }
+                        .addOnFailureListener {
+                            continuation.resume(null)
+                        }
+                } catch (e: SecurityException) {
+                    Log.d(TAG, "Location permission not granted, cannot read speed")
+                    continuation.resume(null)
+                }
+            }
+        }
         private fun todayAsWeekday(day: DayOfWeek): Weekday {
             return when (day) {
                 DayOfWeek.MONDAY -> Weekday.MONDAY
