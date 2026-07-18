@@ -22,8 +22,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import com.example.ghostride.ui.theme.GhostRideTheme
 import kotlinx.coroutines.launch
+import java.util.concurrent.TimeUnit
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 
 class MainActivity : ComponentActivity() {
 
@@ -76,9 +83,25 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun scheduleSilentFailureCheck() {
+        val request = PeriodicWorkRequestBuilder<SilentFailureWorker>(7, TimeUnit.DAYS).build()
+        WorkManager.getInstance(applicationContext).enqueueUniquePeriodicWork(
+            "silent_failure_check",
+            ExistingPeriodicWorkPolicy.KEEP,
+            request
+        )
+    }
+
+    private fun runSilentFailureCheckNow() {
+        val request = OneTimeWorkRequestBuilder<SilentFailureWorker>().build()
+        WorkManager.getInstance(applicationContext).enqueue(request)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        scheduleSilentFailureCheck()
 
         val database = GhostRideDatabase.getInstance(applicationContext)
 
@@ -204,6 +227,9 @@ class MainActivity : ComponentActivity() {
                         },
                         onRequestBatteryExemption = {
                             requestBatteryOptimizationExemption()
+                        },
+                        onRunSilentFailureCheck = {
+                            runSilentFailureCheckNow()
                         }
                     )
                 }
@@ -220,9 +246,10 @@ fun TestScreen(
     onCheckSpeed: () -> Unit,
     onStartActivityUpdates: () -> Unit,
     onCreateTestActiveRide: () -> Unit,
-    onRequestBatteryExemption: () -> Unit
+    onRequestBatteryExemption: () -> Unit,
+    onRunSilentFailureCheck: () -> Unit
 ) {
-    Column(modifier = modifier) {
+    Column(modifier = modifier.verticalScroll(rememberScrollState())) {
         Text(text = "GhostRide")
         Button(onClick = onSimulateConnect) {
             Text("Simulate Vehicle Connect")
@@ -241,6 +268,9 @@ fun TestScreen(
         }
         Button(onClick = onRequestBatteryExemption) {
             Text("Request Battery Optimization Exemption")
+        }
+        Button(onClick = onRunSilentFailureCheck) {
+            Text("Run Silent Failure Check Now")
         }
     }
 }
