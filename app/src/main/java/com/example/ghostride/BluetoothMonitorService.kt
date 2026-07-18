@@ -16,6 +16,7 @@ import java.time.LocalDate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 class BluetoothMonitorService : Service() {
 
@@ -30,10 +31,45 @@ class BluetoothMonitorService : Service() {
             val weekday = todayAsWeekday(today)
             val workingDay = database.workingDayDao().getWorkingDay(weekday)
 
-            if (workingDay?.isEnabled == true) {
-                Log.d(TAG, "Tentative connect on working day: $vehicleAddress")
-            } else {
+            if (workingDay?.isEnabled != true) {
                 Log.d(TAG, "Ignored connect, not a working day: $vehicleAddress")
+                return
+            }
+
+            Log.d(TAG, "Tentative connect on working day: $vehicleAddress. Starting confirmation window...")
+
+            val vehicle = database.vehicleDao().getVehicleByBluetoothMac(vehicleAddress)
+            if (vehicle == null) {
+                Log.d(TAG, "No configured vehicle found for address: $vehicleAddress")
+                return
+            }
+
+            val driver = database.driverDao().getDriverById(vehicle.driverId)
+            if (driver == null) {
+                Log.d(TAG, "No configured driver found for vehicle: ${vehicle.name}")
+                return
+            }
+
+            val connectTime = System.currentTimeMillis()
+
+            // TEMPORARY for testing: pretend motion-checking takes 5 seconds, then always confirm.
+            // Step C replaces this with the real Activity Recognition + GPS speed check.
+            delay(5000L)
+            val motionConfirmed = true
+
+            if (motionConfirmed) {
+                val ride = Ride(
+                    driverId = driver.id,
+                    vehicleId = vehicle.id,
+                    driverNameSnapshot = driver.name,
+                    vehicleNameSnapshot = vehicle.name,
+                    boardingTime = connectTime,
+                    rideStatus = RideStatus.ACTIVE
+                )
+                database.rideDao().insertRide(ride)
+                Log.d(TAG, "Motion confirmed. Ride created: ${ride.id}")
+            } else {
+                Log.d(TAG, "No motion confirmed within window. Discarding tentative connect.")
             }
         }
 

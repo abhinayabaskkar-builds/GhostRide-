@@ -62,10 +62,22 @@ class MainActivity : ComponentActivity() {
                     WorkingDay(Weekday.WEDNESDAY, true),
                     WorkingDay(Weekday.THURSDAY, true),
                     WorkingDay(Weekday.FRIDAY, true),
-                    WorkingDay(Weekday.SATURDAY, false),
+                    WorkingDay(Weekday.SATURDAY, isEnabled = true),
                     WorkingDay(Weekday.SUNDAY, false)
                 )
                 defaults.forEach { database.workingDayDao().insertWorkingDay(it) }
+            }
+            val existingDrivers = database.driverDao().getAllDrivers()
+            if (existingDrivers.isEmpty()) {
+                val placeholderDriver = Driver(name = "Test Driver")
+                database.driverDao().insertDriver(placeholderDriver)
+
+                val placeholderVehicle = Vehicle(
+                    name = "Test Vehicle",
+                    bluetoothMac = Config.vehicle1MacAddress,
+                    driverId = placeholderDriver.id
+                )
+                database.vehicleDao().insertVehicle(placeholderVehicle)
             }
         }
 
