@@ -12,13 +12,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -26,11 +21,10 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import com.example.ghostride.ui.navigation.GhostRideNavigation
 import com.example.ghostride.ui.theme.GhostRideTheme
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 
 class MainActivity : ComponentActivity() {
 
@@ -173,8 +167,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             GhostRideTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    TestScreen(
-                        modifier = Modifier.padding(innerPadding),
+                    GhostRideNavigation(
                         onSimulateConnect = {
                             lifecycleScope.launch {
                                 BluetoothMonitorService.handleConnect(
@@ -234,43 +227,6 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             }
-        }
-    }
-}
-
-@Composable
-fun TestScreen(
-    modifier: Modifier = Modifier,
-    onSimulateConnect: () -> Unit,
-    onSimulateDisconnect: () -> Unit,
-    onCheckSpeed: () -> Unit,
-    onStartActivityUpdates: () -> Unit,
-    onCreateTestActiveRide: () -> Unit,
-    onRequestBatteryExemption: () -> Unit,
-    onRunSilentFailureCheck: () -> Unit
-) {
-    Column(modifier = modifier.verticalScroll(rememberScrollState())) {
-        Text(text = "GhostRide")
-        Button(onClick = onSimulateConnect) {
-            Text("Simulate Vehicle Connect")
-        }
-        Button(onClick = onSimulateDisconnect) {
-            Text("Simulate Vehicle Disconnect")
-        }
-        Button(onClick = onCheckSpeed) {
-            Text("Check GPS Speed")
-        }
-        Button(onClick = onStartActivityUpdates) {
-            Text("Start Activity Recognition")
-        }
-        Button(onClick = onCreateTestActiveRide) {
-            Text("Create Test Active Ride")
-        }
-        Button(onClick = onRequestBatteryExemption) {
-            Text("Request Battery Optimization Exemption")
-        }
-        Button(onClick = onRunSilentFailureCheck) {
-            Text("Run Silent Failure Check Now")
         }
     }
 }
