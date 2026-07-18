@@ -7,6 +7,13 @@ import android.util.Log
 import com.google.android.gms.location.ActivityRecognitionResult
 import com.google.android.gms.location.DetectedActivity
 
+object LatestMotionState {
+    @Volatile
+    var activityType: Int = DetectedActivity.UNKNOWN
+    @Volatile
+    var confidence: Int = 0
+}
+
 class ActivityRecognitionReceiver : BroadcastReceiver() {
 
     companion object {
@@ -18,6 +25,8 @@ class ActivityRecognitionReceiver : BroadcastReceiver() {
             val result = ActivityRecognitionResult.extractResult(intent)
             val mostProbable = result?.mostProbableActivity
             if (mostProbable != null) {
+                LatestMotionState.activityType = mostProbable.type
+                LatestMotionState.confidence = mostProbable.confidence
                 val activityName = activityTypeToString(mostProbable.type)
                 Log.d(TAG, "Detected activity: $activityName, confidence: ${mostProbable.confidence}")
             }
