@@ -6,8 +6,10 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.ghostride.ui.screens.DevToolsScreen
+import com.example.ghostride.ui.screens.SetupHomeScreen
 
 object Routes {
+    const val SETUP_HOME = "setup_home"
     const val DEV_TOOLS = "dev_tools"
 }
 
@@ -24,8 +26,11 @@ fun GhostRideNavigation(
 ) {
     NavHost(
         navController = navController,
-        startDestination = Routes.DEV_TOOLS
+        startDestination = Routes.SETUP_HOME
     ) {
+        composable(Routes.SETUP_HOME) {
+            SetupHomeScreen()
+        }
         composable(Routes.DEV_TOOLS) {
             DevToolsScreen(
                 onSimulateConnect = onSimulateConnect,
