@@ -3,8 +3,11 @@ package com.example.ghostride
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -58,6 +61,18 @@ class MainActivity : ComponentActivity() {
     private fun maybeStartService() {
         if (bluetoothGranted) {
             startForegroundService(Intent(this, BluetoothMonitorService::class.java))
+        }
+    }
+
+    private fun requestBatteryOptimizationExemption() {
+        val powerManager = getSystemService(PowerManager::class.java)
+        val alreadyIgnoring = powerManager.isIgnoringBatteryOptimizations(packageName)
+
+        if (!alreadyIgnoring) {
+            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = Uri.parse("package:$packageName")
+            }
+            startActivity(intent)
         }
     }
 
@@ -184,9 +199,11 @@ class MainActivity : ComponentActivity() {
                                         applicationContext, testRide.id
                                     )
                                     android.util.Log.d("TestSetup", "Created test active ride: ${testRide.id}")
-                                    android.util.Log.d("TestSetup", "Created test active ride: ${testRide.id}")
                                 }
                             }
+                        },
+                        onRequestBatteryExemption = {
+                            requestBatteryOptimizationExemption()
                         }
                     )
                 }
@@ -202,7 +219,8 @@ fun TestScreen(
     onSimulateDisconnect: () -> Unit,
     onCheckSpeed: () -> Unit,
     onStartActivityUpdates: () -> Unit,
-    onCreateTestActiveRide: () -> Unit
+    onCreateTestActiveRide: () -> Unit,
+    onRequestBatteryExemption: () -> Unit
 ) {
     Column(modifier = modifier) {
         Text(text = "GhostRide")
@@ -220,6 +238,9 @@ fun TestScreen(
         }
         Button(onClick = onCreateTestActiveRide) {
             Text("Create Test Active Ride")
+        }
+        Button(onClick = onRequestBatteryExemption) {
+            Text("Request Battery Optimization Exemption")
         }
     }
 }
