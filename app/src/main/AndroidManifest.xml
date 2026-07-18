@@ -33,6 +33,9 @@
             android:name=".BluetoothMonitorService"
             android:foregroundServiceType="connectedDevice"
             android:exported="false" />
+        <receiver
+            android:name=".ActivityRecognitionReceiver"
+            android:exported="false" />
     </application>
 
 </manifest>

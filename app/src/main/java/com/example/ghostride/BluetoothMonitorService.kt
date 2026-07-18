@@ -21,6 +21,8 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
+import android.app.PendingIntent
+import com.google.android.gms.location.ActivityRecognition
 
 class BluetoothMonitorService : Service() {
 
@@ -95,6 +97,26 @@ class BluetoothMonitorService : Service() {
                     Log.d(TAG, "Location permission not granted, cannot read speed")
                     continuation.resume(null)
                 }
+            }
+        }
+        fun startActivityRecognitionUpdates(context: Context) {
+            val client = ActivityRecognition.getClient(context)
+            val intent = Intent(context, ActivityRecognitionReceiver::class.java)
+            val pendingIntent = PendingIntent.getBroadcast(
+                context, 0, intent,
+                PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+
+            try {
+                client.requestActivityUpdates(10000L, pendingIntent)
+                    .addOnSuccessListener {
+                        Log.d(TAG, "Activity recognition updates requested successfully")
+                    }
+                    .addOnFailureListener {
+                        Log.d(TAG, "Failed to request activity updates: ${it.message}")
+                    }
+            } catch (e: SecurityException) {
+                Log.d(TAG, "Activity Recognition permission not granted")
             }
         }
         private fun todayAsWeekday(day: DayOfWeek): Weekday {

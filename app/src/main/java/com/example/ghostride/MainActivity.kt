@@ -27,6 +27,7 @@ class MainActivity : ComponentActivity() {
     private var bluetoothGranted = false
     private var notificationGranted = false
     private var locationGranted = false
+    private var activityRecognitionGranted = false
 
     private val bluetoothPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -46,6 +47,12 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         locationGranted = isGranted
+    }
+
+    private val activityRecognitionPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        activityRecognitionGranted = isGranted
     }
 
     private fun maybeStartService() {
@@ -105,6 +112,10 @@ class MainActivity : ComponentActivity() {
             this, Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
 
+        activityRecognitionGranted = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.ACTIVITY_RECOGNITION
+        ) == PackageManager.PERMISSION_GRANTED
+
         if (!bluetoothGranted) {
             bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
         } else if (!notificationGranted) {
@@ -115,6 +126,10 @@ class MainActivity : ComponentActivity() {
 
         if (!locationGranted) {
             locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+
+        if (!activityRecognitionGranted) {
+            activityRecognitionPermissionLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
         }
 
         setContent {
@@ -137,6 +152,9 @@ class MainActivity : ComponentActivity() {
                                 )
                                 android.util.Log.d("SpeedTest", "Current speed: $speed m/s")
                             }
+                        },
+                        onStartActivityUpdates = {
+                            BluetoothMonitorService.startActivityRecognitionUpdates(applicationContext)
                         }
                     )
                 }
@@ -149,7 +167,8 @@ class MainActivity : ComponentActivity() {
 fun TestScreen(
     modifier: Modifier = Modifier,
     onSimulateConnect: () -> Unit,
-    onCheckSpeed: () -> Unit
+    onCheckSpeed: () -> Unit,
+    onStartActivityUpdates: () -> Unit
 ) {
     Column(modifier = modifier) {
         Text(text = "GhostRide")
@@ -158,6 +177,9 @@ fun TestScreen(
         }
         Button(onClick = onCheckSpeed) {
             Text("Check GPS Speed")
+        }
+        Button(onClick = onStartActivityUpdates) {
+            Text("Start Activity Recognition")
         }
     }
 }
