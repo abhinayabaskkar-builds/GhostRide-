@@ -42,7 +42,6 @@ class BluetoothMonitorService : Service() {
                 return
             }
 
-            // Check if this is a reconnect within the grace period of an existing ride
             val existingActiveRide = database.rideDao().getActiveRide()
             if (existingActiveRide != null &&
                 existingActiveRide.vehicleId == vehicle.id &&
@@ -56,6 +55,7 @@ class BluetoothMonitorService : Service() {
                 )
                 database.rideDao().updateRide(resumedRide)
                 Log.d(TAG, "Reconnected within grace period, resuming ride: ${resumedRide.id}")
+                startLocationTracking(context, resumedRide.id)
                 return
             }
 
@@ -110,6 +110,7 @@ class BluetoothMonitorService : Service() {
                 )
                 database.rideDao().insertRide(ride)
                 Log.d(TAG, "Motion confirmed. Ride created: ${ride.id}")
+                startLocationTracking(context, ride.id)
             } else {
                 Log.d(TAG, "No motion confirmed within window. Discarding tentative connect.")
             }
@@ -152,10 +153,15 @@ class BluetoothMonitorService : Service() {
                     (recheckedRide.arrivalTime - recheckedRide.boardingTime) / 1000
                 } else null
 
-                val distance = calculateDistanceMeters(
-                    recheckedRide.boardingLatitude, recheckedRide.boardingLongitude,
-                    recheckedRide.arrivalLatitude, recheckedRide.arrivalLongitude
-                )
+                val gpsLogs = database.gpsLogDao().getGpsLogsForRide(recheckedRide.id)
+                val distance = if (gpsLogs.size >= 2) {
+                    calculateRouteDistanceMeters(gpsLogs)
+                } else {
+                    calculateDistanceMeters(
+                        recheckedRide.boardingLatitude, recheckedRide.boardingLongitude,
+                        recheckedRide.arrivalLatitude, recheckedRide.arrivalLongitude
+                    )
+                }
 
                 val tag = tagRide(recheckedRide.arrivalLatitude, recheckedRide.arrivalLongitude)
 
@@ -168,11 +174,54 @@ class BluetoothMonitorService : Service() {
                 database.rideDao().updateRide(completedRide)
                 Log.d(
                     TAG,
-                    "Ride finalized: ${completedRide.id}, duration=${duration}s, distance=${distance}m, tag=$tag"
+                    "Ride finalized: ${completedRide.id}, duration=${duration}s, distance=${distance}m, tag=$tag, gpsPoints=${gpsLogs.size}"
                 )
             } else {
                 Log.d(TAG, "Ride reconnected within grace period, no finalization needed: ${finalizingRide.id}")
             }
+        }
+
+        fun startLocationTracking(context: Context, rideId: String) {
+            CoroutineScope(Dispatchers.IO).launch {
+                val database = GhostRideDatabase.getInstance(context)
+                Log.d(TAG, "Starting location tracking for ride: $rideId")
+
+                while (true) {
+                    val ride = database.rideDao().getRideById(rideId)
+                    if (ride == null || ride.rideStatus != RideStatus.ACTIVE) {
+                        Log.d(TAG, "Stopping location tracking for ride: $rideId")
+                        break
+                    }
+
+                    val location = getCurrentLocationOrNull(context)
+                    if (location != null) {
+                        val gpsLog = GpsLog(
+                            rideId = rideId,
+                            timestamp = System.currentTimeMillis(),
+                            latitude = location.latitude,
+                            longitude = location.longitude
+                        )
+                        database.gpsLogDao().insertGpsLog(gpsLog)
+                        Log.d(TAG, "Logged GPS point for ride $rideId: ${location.latitude}, ${location.longitude}")
+                    }
+
+                    delay(Config.locationLogIntervalMillis)
+                }
+            }
+        }
+
+        private fun calculateRouteDistanceMeters(gpsLogs: List<GpsLog>): Double {
+            var total = 0.0
+            for (i in 0 until gpsLogs.size - 1) {
+                val point1 = gpsLogs[i]
+                val point2 = gpsLogs[i + 1]
+                val segment = calculateDistanceMeters(
+                    point1.latitude, point1.longitude,
+                    point2.latitude, point2.longitude
+                )
+                total += segment ?: 0.0
+            }
+            return total
         }
 
         private fun calculateDistanceMeters(

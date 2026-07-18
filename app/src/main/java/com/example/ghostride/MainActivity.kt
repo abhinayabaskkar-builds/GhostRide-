@@ -180,6 +180,10 @@ class MainActivity : ComponentActivity() {
                                         rideStatus = RideStatus.ACTIVE
                                     )
                                     database.rideDao().insertRide(testRide)
+                                    BluetoothMonitorService.startLocationTracking(
+                                        applicationContext, testRide.id
+                                    )
+                                    android.util.Log.d("TestSetup", "Created test active ride: ${testRide.id}")
                                     android.util.Log.d("TestSetup", "Created test active ride: ${testRide.id}")
                                 }
                             }

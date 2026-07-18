@@ -13,5 +13,6 @@ object Config {
 
     const val homeLatitude: Double = 14.5176
     const val homeLongitude: Double = 121.0509
+    const val locationLogIntervalMillis: Long = 30000L
 
 }
