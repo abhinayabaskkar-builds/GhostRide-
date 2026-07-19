@@ -7,8 +7,11 @@ import androidx.compose.runtime.Composable
 
 private val GhostRideDarkColorScheme = darkColorScheme(
     primary = GhostRideGreenLight,
+    onPrimary = GhostRideOnPrimary,
     secondary = GhostRideGreenDark,
+    onSecondary = GhostRideOnSecondary,
     tertiary = GhostRideAmber,
+    onTertiary = GhostRideOnTertiary,
     background = GhostRideBackground,
     surface = GhostRideSurface,
     onBackground = GhostRideOnBackground,
@@ -17,8 +20,11 @@ private val GhostRideDarkColorScheme = darkColorScheme(
 
 private val GhostRideLightColorScheme = lightColorScheme(
     primary = GhostRideGreenDark,
+    onPrimary = GhostRideOnSecondary,
     secondary = GhostRideGreenLight,
-    tertiary = GhostRideAmber
+    onSecondary = GhostRideOnPrimary,
+    tertiary = GhostRideAmber,
+    onTertiary = GhostRideOnTertiary
 )
 
 @Composable

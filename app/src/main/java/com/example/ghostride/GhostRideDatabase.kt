@@ -7,10 +7,9 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 
 @Database(
-    entities = [Driver::class, Vehicle::class, Ride::class, GpsLog::class, WorkingDay::class],
-    version = 1
+    entities = [Driver::class, Vehicle::class, Ride::class, GpsLog::class, WorkingDay::class, Profile::class],
+    version = 2
 )
-
 @TypeConverters(Converters::class)
 abstract class GhostRideDatabase : RoomDatabase() {
 
@@ -19,6 +18,7 @@ abstract class GhostRideDatabase : RoomDatabase() {
     abstract fun rideDao(): RideDao
     abstract fun gpsLogDao(): GpsLogDao
     abstract fun workingDayDao(): WorkingDayDao
+    abstract fun profileDao(): ProfileDao
 
     companion object {
         @Volatile

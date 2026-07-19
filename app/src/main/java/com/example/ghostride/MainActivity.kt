@@ -25,6 +25,7 @@ import com.example.ghostride.ui.navigation.GhostRideNavigation
 import com.example.ghostride.ui.theme.GhostRideTheme
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
+import androidx.compose.foundation.layout.padding
 
 class MainActivity : ComponentActivity() {
 
@@ -168,6 +169,7 @@ class MainActivity : ComponentActivity() {
             GhostRideTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     GhostRideNavigation(
+                        modifier = Modifier.padding(innerPadding),
                         onSimulateConnect = {
                             lifecycleScope.launch {
                                 BluetoothMonitorService.handleConnect(
