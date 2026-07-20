@@ -163,7 +163,7 @@ class BluetoothMonitorService : Service() {
                     )
                 }
 
-                val tag = tagRide(recheckedRide.arrivalLatitude, recheckedRide.arrivalLongitude)
+                val tag = tagRide(database, recheckedRide.arrivalLatitude, recheckedRide.arrivalLongitude)
 
                 val completedRide = recheckedRide.copy(
                     rideStatus = RideStatus.COMPLETED,
@@ -238,20 +238,31 @@ class BluetoothMonitorService : Service() {
             return earthRadiusMeters * c
         }
 
-        private fun tagRide(arrivalLat: Double?, arrivalLon: Double?): RideTag {
+        private suspend fun tagRide(
+            database: GhostRideDatabase,
+            arrivalLat: Double?,
+            arrivalLon: Double?
+        ): RideTag {
             if (arrivalLat == null || arrivalLon == null) return RideTag.UNCLASSIFIED
 
-            val distanceToOffice = calculateDistanceMeters(
-                arrivalLat, arrivalLon, Config.officeLatitude, Config.officeLongitude
-            )
-            val distanceToHome = calculateDistanceMeters(
-                arrivalLat, arrivalLon, Config.homeLatitude, Config.homeLongitude
-            )
+            val officeLocation = database.locationDao().getLocation(LocationType.OFFICE)
+            val homeLocation = database.locationDao().getLocation(LocationType.HOME)
+
+            val officeLat = officeLocation?.latitude ?: Config.officeLatitude
+            val officeLon = officeLocation?.longitude ?: Config.officeLongitude
+            val officeRadius = officeLocation?.geofenceRadiusMeters?.toDouble() ?: Config.geofenceRadiusMeters
+
+            val homeLat = homeLocation?.latitude ?: Config.homeLatitude
+            val homeLon = homeLocation?.longitude ?: Config.homeLongitude
+            val homeRadius = homeLocation?.geofenceRadiusMeters?.toDouble() ?: Config.geofenceRadiusMeters
+
+            val distanceToOffice = calculateDistanceMeters(arrivalLat, arrivalLon, officeLat, officeLon)
+            val distanceToHome = calculateDistanceMeters(arrivalLat, arrivalLon, homeLat, homeLon)
 
             return when {
-                distanceToOffice != null && distanceToOffice <= Config.geofenceRadiusMeters ->
+                distanceToOffice != null && distanceToOffice <= officeRadius ->
                     RideTag.OFFICE_COMMUTE
-                distanceToHome != null && distanceToHome <= Config.geofenceRadiusMeters ->
+                distanceToHome != null && distanceToHome <= homeRadius ->
                     RideTag.HOME
                 else -> RideTag.UNCLASSIFIED
             }
