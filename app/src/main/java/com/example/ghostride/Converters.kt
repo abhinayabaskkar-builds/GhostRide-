@@ -14,4 +14,10 @@ class Converters {
 
     @TypeConverter
     fun toRideStatus(value: String): RideStatus = RideStatus.valueOf(value)
+
+    @TypeConverter
+    fun fromLocationType(value: LocationType): String = value.name
+
+    @TypeConverter
+    fun toLocationType(value: String): LocationType = LocationType.valueOf(value)
 }

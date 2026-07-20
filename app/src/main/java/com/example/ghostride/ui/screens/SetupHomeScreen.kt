@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.ghostride.GhostRideDatabase
+import com.example.ghostride.LocationType
 import com.example.ghostride.ui.theme.GhostRideAmber
 import com.example.ghostride.ui.theme.GhostRideGray
 import com.example.ghostride.ui.theme.GhostRideGreenLight
@@ -61,7 +62,8 @@ fun SetupHomeScreen(
     modifier: Modifier = Modifier,
     onNavigateToProfile: () -> Unit = {},
     onNavigateToWorkingDays: () -> Unit = {},
-    onNavigateToDriversVehicles: () -> Unit = {}
+    onNavigateToDriversVehicles: () -> Unit = {},
+    onNavigateToLocation: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val database = remember { GhostRideDatabase.getInstance(context) }
@@ -69,6 +71,7 @@ fun SetupHomeScreen(
     var profileStatus by remember { mutableStateOf(SetupStatus.NOT_STARTED) }
     var workingDaysStatus by remember { mutableStateOf(SetupStatus.NOT_STARTED) }
     var driversVehiclesStatus by remember { mutableStateOf(SetupStatus.NOT_STARTED) }
+    var locationStatus by remember { mutableStateOf(SetupStatus.NOT_STARTED) }
 
     LaunchedEffect(Unit) {
         val profile = database.profileDao().getProfile()
@@ -88,12 +91,20 @@ fun SetupHomeScreen(
             vehicles.any { it.driverId == driver.id }
         }
         driversVehiclesStatus = if (hasCompleteDriverVehiclePair) SetupStatus.COMPLETE else SetupStatus.NOT_STARTED
+
+        val home = database.locationDao().getLocation(LocationType.HOME)
+        val office = database.locationDao().getLocation(LocationType.OFFICE)
+        locationStatus = when {
+            home != null && office != null -> SetupStatus.COMPLETE
+            home != null || office != null -> SetupStatus.PARTIAL
+            else -> SetupStatus.NOT_STARTED
+        }
     }
 
     val cards = listOf(
         SetupCardInfo("Profile", profileStatus, onClick = onNavigateToProfile),
         SetupCardInfo("Drivers & Vehicles", driversVehiclesStatus, onClick = onNavigateToDriversVehicles),
-        SetupCardInfo("Home & Office Location", SetupStatus.NOT_STARTED),
+        SetupCardInfo("Home & Office Location", locationStatus, onClick = onNavigateToLocation),
         SetupCardInfo("Working Days", workingDaysStatus, onClick = onNavigateToWorkingDays)
     )
 
