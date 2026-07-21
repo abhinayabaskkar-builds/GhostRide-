@@ -20,4 +20,10 @@ class Converters {
 
     @TypeConverter
     fun toLocationType(value: String): LocationType = LocationType.valueOf(value)
+
+    @TypeConverter
+    fun fromDiscardReason(value: DiscardReason): String = value.name
+
+    @TypeConverter
+    fun toDiscardReason(value: String): DiscardReason = DiscardReason.valueOf(value)
 }

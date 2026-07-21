@@ -59,6 +59,20 @@ class BluetoothMonitorService : Service() {
                 return
             }
 
+            if (existingActiveRide != null && existingActiveRide.rideStatus == RideStatus.ACTIVE) {
+                if (existingActiveRide.vehicleId != vehicle.id) {
+                    database.discardedConnectEventDao().insertDiscardedConnectEvent(
+                        DiscardedConnectEvent(
+                            timestamp = System.currentTimeMillis(),
+                            vehicleId = vehicle.id,
+                            reason = DiscardReason.LOST_RACE_TO_ACTIVE_RIDE
+                        )
+                    )
+                    Log.d(TAG, "Ignored connect, another ride already active: $vehicleAddress")
+                }
+                return
+            }
+
             val today = LocalDate.now().dayOfWeek
             val weekday = todayAsWeekday(today)
             val workingDay = database.workingDayDao().getWorkingDay(weekday)
@@ -112,6 +126,13 @@ class BluetoothMonitorService : Service() {
                 Log.d(TAG, "Motion confirmed. Ride created: ${ride.id}")
                 startLocationTracking(context, ride.id)
             } else {
+                database.discardedConnectEventDao().insertDiscardedConnectEvent(
+                    DiscardedConnectEvent(
+                        timestamp = connectTime,
+                        vehicleId = vehicle.id,
+                        reason = DiscardReason.NO_MOTION_CONFIRMED
+                    )
+                )
                 Log.d(TAG, "No motion confirmed within window. Discarding tentative connect.")
             }
         }
