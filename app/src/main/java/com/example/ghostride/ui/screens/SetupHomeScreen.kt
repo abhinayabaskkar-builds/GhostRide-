@@ -18,6 +18,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -63,7 +64,8 @@ fun SetupHomeScreen(
     onNavigateToProfile: () -> Unit = {},
     onNavigateToWorkingDays: () -> Unit = {},
     onNavigateToDriversVehicles: () -> Unit = {},
-    onNavigateToLocation: () -> Unit = {}
+    onNavigateToLocation: () -> Unit = {},
+    onNavigateToRideHistory: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val database = remember { GhostRideDatabase.getInstance(context) }
@@ -145,6 +147,16 @@ fun SetupHomeScreen(
         ) {
             SetupCard(cards[2], modifier = Modifier.weight(1f))
             SetupCard(cards[3], modifier = Modifier.weight(1f))
+        }
+
+        TextButton(
+            onClick = onNavigateToRideHistory,
+            modifier = Modifier.padding(top = 20.dp)
+        ) {
+            Text(
+                text = "View Ride History →",
+                style = MaterialTheme.typography.labelLarge
+            )
         }
     }
 }

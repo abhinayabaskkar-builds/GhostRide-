@@ -10,6 +10,7 @@ import com.example.ghostride.ui.screens.DevToolsScreen
 import com.example.ghostride.ui.screens.DriversVehiclesScreen
 import com.example.ghostride.ui.screens.LocationScreen
 import com.example.ghostride.ui.screens.ProfileScreen
+import com.example.ghostride.ui.screens.RideHistoryListScreen
 import com.example.ghostride.ui.screens.SetupHomeScreen
 import com.example.ghostride.ui.screens.WorkingDaysScreen
 
@@ -20,6 +21,7 @@ object Routes {
     const val PROFILE = "profile"
     const val LOCATION = "location"
     const val DEV_TOOLS = "dev_tools"
+    const val RIDE_HISTORY = "ride_history"
 }
 
 @Composable
@@ -44,7 +46,8 @@ fun GhostRideNavigation(
                 onNavigateToProfile = { navController.navigate(Routes.PROFILE) },
                 onNavigateToWorkingDays = { navController.navigate(Routes.WORKING_DAYS) },
                 onNavigateToDriversVehicles = { navController.navigate(Routes.DRIVERS_VEHICLES) },
-                onNavigateToLocation = { navController.navigate(Routes.LOCATION) }
+                onNavigateToLocation = { navController.navigate(Routes.LOCATION) },
+                onNavigateToRideHistory = { navController.navigate(Routes.RIDE_HISTORY) }
             )
         }
         composable(Routes.WORKING_DAYS) {
@@ -76,6 +79,11 @@ fun GhostRideNavigation(
                 onCreateTestActiveRide = onCreateTestActiveRide,
                 onRequestBatteryExemption = onRequestBatteryExemption,
                 onRunSilentFailureCheck = onRunSilentFailureCheck
+            )
+        }
+        composable(Routes.RIDE_HISTORY) {
+            RideHistoryListScreen(
+                onBack = { navController.popBackStack() }
             )
         }
     }
