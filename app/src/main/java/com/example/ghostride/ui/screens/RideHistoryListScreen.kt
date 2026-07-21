@@ -93,7 +93,8 @@ private fun formatDistance(distanceMeters: Double?): String {
 @Composable
 fun RideHistoryListScreen(
     modifier: Modifier = Modifier,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onRideClick: (String) -> Unit
 ) {
     val context = LocalContext.current
     val database = remember { GhostRideDatabase.getInstance(context) }
@@ -154,7 +155,7 @@ fun RideHistoryListScreen(
                             )
                         }
                         items(ridesInGroup) { ride ->
-                            RideCard(ride)
+                            RideCard(ride, onClick = { onRideClick(ride.id) })
                         }
                     }
                 }
@@ -164,7 +165,7 @@ fun RideHistoryListScreen(
 }
 
 @Composable
-private fun RideCard(ride: Ride) {
+private fun RideCard(ride: Ride, onClick: () -> Unit) {
     val needsAddress = ride.rideTag == RideTag.OTHER || ride.rideTag == RideTag.UNCLASSIFIED
 
     var boardingAddress by remember(ride.id) { mutableStateOf<String?>(null) }
@@ -188,6 +189,7 @@ private fun RideCard(ride: Ride) {
     }
 
     Card(
+        onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
