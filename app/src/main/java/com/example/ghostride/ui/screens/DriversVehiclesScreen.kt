@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -69,7 +70,9 @@ fun DriversVehiclesScreen(
     val coroutineScope = rememberCoroutineScope()
 
     var driversWithVehicles by remember { mutableStateOf<List<DriverWithVehicle>>(emptyList()) }
-    var showAddForm by remember { mutableStateOf(false) }
+    var showForm by remember { mutableStateOf(false) }
+    var editingEntry by remember { mutableStateOf<DriverWithVehicle?>(null) }
+    var entryPendingDelete by remember { mutableStateOf<DriverWithVehicle?>(null) }
 
     var driverName by remember { mutableStateOf("") }
     var vehicleName by remember { mutableStateOf("") }
@@ -95,8 +98,8 @@ fun DriversVehiclesScreen(
         refreshDrivers()
     }
 
-    LaunchedEffect(showAddForm) {
-        if (showAddForm) {
+    LaunchedEffect(showForm) {
+        if (showForm) {
             refreshPairedDevices()
         }
     }
@@ -106,7 +109,22 @@ fun DriversVehiclesScreen(
         vehicleName = ""
         selectedDevice = null
         manualMacAddress = ""
-        showAddForm = false
+        showForm = false
+        editingEntry = null
+    }
+
+    fun openAddForm() {
+        resetForm()
+        showForm = true
+    }
+
+    fun openEditForm(entry: DriverWithVehicle) {
+        editingEntry = entry
+        driverName = entry.driver.name
+        vehicleName = entry.vehicle?.name ?: ""
+        manualMacAddress = entry.vehicle?.bluetoothMac ?: ""
+        selectedDevice = null
+        showForm = true
     }
 
     Column(
@@ -160,11 +178,25 @@ fun DriversVehiclesScreen(
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                         )
                     }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 10.dp),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = { openEditForm(entry) }) {
+                            Text("Edit")
+                        }
+                        TextButton(onClick = { entryPendingDelete = entry }) {
+                            Text("Delete", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
                 }
             }
         }
 
-        if (showAddForm) {
+        if (showForm) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -172,7 +204,7 @@ fun DriversVehiclesScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "New Driver",
+                        text = if (editingEntry == null) "New Driver" else "Edit Driver",
                         style = MaterialTheme.typography.titleMedium
                     )
 
@@ -280,14 +312,37 @@ fun DriversVehiclesScreen(
                                 val macAddress = selectedDevice?.address ?: manualMacAddress.trim()
                                 if (driverName.isNotBlank() && vehicleName.isNotBlank() && macAddress.isNotBlank()) {
                                     coroutineScope.launch {
-                                        val newDriver = Driver(name = driverName.trim())
-                                        database.driverDao().insertDriver(newDriver)
-                                        val newVehicle = Vehicle(
-                                            name = vehicleName.trim(),
-                                            bluetoothMac = macAddress,
-                                            driverId = newDriver.id
-                                        )
-                                        database.vehicleDao().insertVehicle(newVehicle)
+                                        val currentEditingEntry = editingEntry
+                                        if (currentEditingEntry == null) {
+                                            val newDriver = Driver(name = driverName.trim())
+                                            database.driverDao().insertDriver(newDriver)
+                                            val newVehicle = Vehicle(
+                                                name = vehicleName.trim(),
+                                                bluetoothMac = macAddress,
+                                                driverId = newDriver.id
+                                            )
+                                            database.vehicleDao().insertVehicle(newVehicle)
+                                        } else {
+                                            val updatedDriver = currentEditingEntry.driver.copy(
+                                                name = driverName.trim()
+                                            )
+                                            database.driverDao().updateDriver(updatedDriver)
+
+                                            if (currentEditingEntry.vehicle != null) {
+                                                val updatedVehicle = currentEditingEntry.vehicle.copy(
+                                                    name = vehicleName.trim(),
+                                                    bluetoothMac = macAddress
+                                                )
+                                                database.vehicleDao().updateVehicle(updatedVehicle)
+                                            } else {
+                                                val newVehicle = Vehicle(
+                                                    name = vehicleName.trim(),
+                                                    bluetoothMac = macAddress,
+                                                    driverId = updatedDriver.id
+                                                )
+                                                database.vehicleDao().insertVehicle(newVehicle)
+                                            }
+                                        }
                                         refreshDrivers()
                                         resetForm()
                                     }
@@ -297,14 +352,14 @@ fun DriversVehiclesScreen(
                                     (selectedDevice != null || manualMacAddress.isNotBlank()),
                             modifier = Modifier.padding(start = 8.dp)
                         ) {
-                            Text("Save Driver")
+                            Text(if (editingEntry == null) "Save Driver" else "Save Changes")
                         }
                     }
                 }
             }
         } else {
             Button(
-                onClick = { showAddForm = true },
+                onClick = { openAddForm() },
                 enabled = driversWithVehicles.size < 2,
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -323,5 +378,37 @@ fun DriversVehiclesScreen(
                 modifier = Modifier.padding(top = 16.dp)
             )
         }
+    }
+
+    val entryToDelete = entryPendingDelete
+    if (entryToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { entryPendingDelete = null },
+            title = { Text("Delete ${entryToDelete.driver.name}?") },
+            text = {
+                Text(
+                    "This will remove ${entryToDelete.driver.name}" +
+                            (entryToDelete.vehicle?.let { " and ${it.name}" } ?: "") +
+                            ". This can't be undone. Past rides already recorded won't be affected."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    coroutineScope.launch {
+                        database.driverDao().deleteDriver(entryToDelete.driver)
+                        entryToDelete.vehicle?.let { database.vehicleDao().deleteVehicle(it) }
+                        refreshDrivers()
+                        entryPendingDelete = null
+                    }
+                }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { entryPendingDelete = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
