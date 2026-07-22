@@ -6,6 +6,7 @@ import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.pm.PackageManager
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,6 +32,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.example.ghostride.Driver
@@ -68,10 +73,11 @@ fun DriversVehiclesScreen(
     val context = LocalContext.current
     val database = remember { GhostRideDatabase.getInstance(context) }
     val coroutineScope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
 
     var driversWithVehicles by remember { mutableStateOf<List<DriverWithVehicle>>(emptyList()) }
-    var showForm by remember { mutableStateOf(false) }
-    var editingEntry by remember { mutableStateOf<DriverWithVehicle?>(null) }
+    var showAddForm by remember { mutableStateOf(false) }
+    var editingDriverId by remember { mutableStateOf<String?>(null) }
     var entryPendingDelete by remember { mutableStateOf<DriverWithVehicle?>(null) }
 
     var driverName by remember { mutableStateOf("") }
@@ -98,8 +104,8 @@ fun DriversVehiclesScreen(
         refreshDrivers()
     }
 
-    LaunchedEffect(showForm) {
-        if (showForm) {
+    LaunchedEffect(showAddForm, editingDriverId) {
+        if (showAddForm || editingDriverId != null) {
             refreshPairedDevices()
         }
     }
@@ -109,28 +115,65 @@ fun DriversVehiclesScreen(
         vehicleName = ""
         selectedDevice = null
         manualMacAddress = ""
-        showForm = false
-        editingEntry = null
+        showAddForm = false
+        editingDriverId = null
+        focusManager.clearFocus()
     }
 
     fun openAddForm() {
         resetForm()
-        showForm = true
+        showAddForm = true
     }
 
     fun openEditForm(entry: DriverWithVehicle) {
-        editingEntry = entry
+        resetForm()
+        editingDriverId = entry.driver.id
         driverName = entry.driver.name
         vehicleName = entry.vehicle?.name ?: ""
         manualMacAddress = entry.vehicle?.bluetoothMac ?: ""
-        selectedDevice = null
-        showForm = true
+    }
+
+    fun saveForm(existingDriver: Driver?, existingVehicle: Vehicle?) {
+        val macAddress = selectedDevice?.address ?: manualMacAddress.trim()
+        if (driverName.isBlank() || vehicleName.isBlank() || macAddress.isBlank()) return
+
+        coroutineScope.launch {
+            if (existingDriver == null) {
+                val newDriver = Driver(name = driverName.trim())
+                database.driverDao().insertDriver(newDriver)
+                val newVehicle = Vehicle(
+                    name = vehicleName.trim(),
+                    bluetoothMac = macAddress,
+                    driverId = newDriver.id
+                )
+                database.vehicleDao().insertVehicle(newVehicle)
+            } else {
+                val updatedDriver = existingDriver.copy(name = driverName.trim())
+                database.driverDao().updateDriver(updatedDriver)
+
+                if (existingVehicle != null) {
+                    database.vehicleDao().updateVehicle(
+                        existingVehicle.copy(name = vehicleName.trim(), bluetoothMac = macAddress)
+                    )
+                } else {
+                    database.vehicleDao().insertVehicle(
+                        Vehicle(name = vehicleName.trim(), bluetoothMac = macAddress, driverId = updatedDriver.id)
+                    )
+                }
+            }
+            refreshDrivers()
+            resetForm()
+        }
     }
 
     Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp, vertical = 24.dp)
+            .clickable(
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() }
+            ) { focusManager.clearFocus() }
     ) {
         TextButton(onClick = onBack) {
             Text(
@@ -194,170 +237,51 @@ fun DriversVehiclesScreen(
                     }
                 }
             }
+
+            // Inline edit form — appears directly under the card being edited,
+            // instead of a separate block elsewhere on the screen.
+            if (editingDriverId == entry.driver.id) {
+                DriverForm(
+                    formTitle = "Edit Driver",
+                    driverName = driverName,
+                    onDriverNameChange = { driverName = it },
+                    vehicleName = vehicleName,
+                    onVehicleNameChange = { vehicleName = it },
+                    manualMacAddress = manualMacAddress,
+                    onManualMacChange = { manualMacAddress = it },
+                    selectedDevice = selectedDevice,
+                    onDeviceSelected = { selectedDevice = it },
+                    pairedDevices = pairedDevices,
+                    permissionMissing = permissionMissing,
+                    onRetry = { refreshPairedDevices() },
+                    onCancel = { resetForm() },
+                    onSave = { saveForm(entry.driver, entry.vehicle) },
+                    saveLabel = "Save Changes",
+                    focusManager = focusManager
+                )
+            }
         }
 
-        if (showForm) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = if (editingEntry == null) "New Driver" else "Edit Driver",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-
-                    OutlinedTextField(
-                        value = driverName,
-                        onValueChange = { driverName = it },
-                        label = { Text("Driver name") },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 12.dp)
-                    )
-
-                    Text(
-                        text = "Select vehicle's paired Bluetooth device",
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(top = 20.dp, bottom = 4.dp)
-                    )
-
-                    when {
-                        permissionMissing -> {
-                            Text(
-                                text = "Bluetooth permission not granted. Enable it in phone settings, then retry.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.tertiary
-                            )
-                        }
-                        pairedDevices.isEmpty() -> {
-                            Text(
-                                text = "No paired devices found. Pair the vehicle's Bluetooth in your phone's Bluetooth settings first, then retry.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.tertiary
-                            )
-                        }
-                        else -> {
-                            pairedDevices.forEach { device ->
-                                val deviceName = try {
-                                    device.name ?: device.address
-                                } catch (e: SecurityException) {
-                                    device.address
-                                }
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { selectedDevice = device }
-                                        .padding(vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    RadioButton(
-                                        selected = selectedDevice?.address == device.address,
-                                        onClick = { selectedDevice = device }
-                                    )
-                                    Column {
-                                        Text(
-                                            text = deviceName,
-                                            style = MaterialTheme.typography.bodyMedium
-                                        )
-                                        Text(
-                                            text = device.address,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    TextButton(
-                        onClick = { refreshPairedDevices() },
-                        modifier = Modifier.padding(top = 4.dp)
-                    ) {
-                        Text("Retry", style = MaterialTheme.typography.labelLarge)
-                    }
-
-                    OutlinedTextField(
-                        value = manualMacAddress,
-                        onValueChange = { manualMacAddress = it },
-                        label = { Text("Or enter MAC address manually (testing only)") },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 12.dp)
-                    )
-
-                    OutlinedTextField(
-                        value = vehicleName,
-                        onValueChange = { vehicleName = it },
-                        label = { Text("Vehicle name") },
-                        enabled = selectedDevice != null || manualMacAddress.isNotBlank(),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 12.dp)
-                    )
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 20.dp),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        TextButton(onClick = { resetForm() }) {
-                            Text("Cancel")
-                        }
-                        Button(
-                            onClick = {
-                                val macAddress = selectedDevice?.address ?: manualMacAddress.trim()
-                                if (driverName.isNotBlank() && vehicleName.isNotBlank() && macAddress.isNotBlank()) {
-                                    coroutineScope.launch {
-                                        val currentEditingEntry = editingEntry
-                                        if (currentEditingEntry == null) {
-                                            val newDriver = Driver(name = driverName.trim())
-                                            database.driverDao().insertDriver(newDriver)
-                                            val newVehicle = Vehicle(
-                                                name = vehicleName.trim(),
-                                                bluetoothMac = macAddress,
-                                                driverId = newDriver.id
-                                            )
-                                            database.vehicleDao().insertVehicle(newVehicle)
-                                        } else {
-                                            val updatedDriver = currentEditingEntry.driver.copy(
-                                                name = driverName.trim()
-                                            )
-                                            database.driverDao().updateDriver(updatedDriver)
-
-                                            if (currentEditingEntry.vehicle != null) {
-                                                val updatedVehicle = currentEditingEntry.vehicle.copy(
-                                                    name = vehicleName.trim(),
-                                                    bluetoothMac = macAddress
-                                                )
-                                                database.vehicleDao().updateVehicle(updatedVehicle)
-                                            } else {
-                                                val newVehicle = Vehicle(
-                                                    name = vehicleName.trim(),
-                                                    bluetoothMac = macAddress,
-                                                    driverId = updatedDriver.id
-                                                )
-                                                database.vehicleDao().insertVehicle(newVehicle)
-                                            }
-                                        }
-                                        refreshDrivers()
-                                        resetForm()
-                                    }
-                                }
-                            },
-                            enabled = driverName.isNotBlank() && vehicleName.isNotBlank() &&
-                                    (selectedDevice != null || manualMacAddress.isNotBlank()),
-                            modifier = Modifier.padding(start = 8.dp)
-                        ) {
-                            Text(if (editingEntry == null) "Save Driver" else "Save Changes")
-                        }
-                    }
-                }
-            }
-        } else {
+        if (showAddForm) {
+            DriverForm(
+                formTitle = "New Driver",
+                driverName = driverName,
+                onDriverNameChange = { driverName = it },
+                vehicleName = vehicleName,
+                onVehicleNameChange = { vehicleName = it },
+                manualMacAddress = manualMacAddress,
+                onManualMacChange = { manualMacAddress = it },
+                selectedDevice = selectedDevice,
+                onDeviceSelected = { selectedDevice = it },
+                pairedDevices = pairedDevices,
+                permissionMissing = permissionMissing,
+                onRetry = { refreshPairedDevices() },
+                onCancel = { resetForm() },
+                onSave = { saveForm(null, null) },
+                saveLabel = "Save Driver",
+                focusManager = focusManager
+            )
+        } else if (editingDriverId == null) {
             Button(
                 onClick = { openAddForm() },
                 enabled = driversWithVehicles.size < 2,
@@ -410,5 +334,158 @@ fun DriversVehiclesScreen(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun DriverForm(
+    formTitle: String,
+    driverName: String,
+    onDriverNameChange: (String) -> Unit,
+    vehicleName: String,
+    onVehicleNameChange: (String) -> Unit,
+    manualMacAddress: String,
+    onManualMacChange: (String) -> Unit,
+    selectedDevice: BluetoothDevice?,
+    onDeviceSelected: (BluetoothDevice) -> Unit,
+    pairedDevices: List<BluetoothDevice>,
+    permissionMissing: Boolean,
+    onRetry: () -> Unit,
+    onCancel: () -> Unit,
+    onSave: () -> Unit,
+    saveLabel: String,
+    focusManager: androidx.compose.ui.focus.FocusManager
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 12.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = formTitle,
+                style = MaterialTheme.typography.titleMedium
+            )
+
+            OutlinedTextField(
+                value = driverName,
+                onValueChange = onDriverNameChange,
+                label = { Text("Driver name") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp)
+            )
+
+            Text(
+                text = "Select vehicle's paired Bluetooth device",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 20.dp, bottom = 4.dp)
+            )
+
+            when {
+                permissionMissing -> {
+                    Text(
+                        text = "Bluetooth permission not granted. Enable it in phone settings, then retry.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
+                }
+                pairedDevices.isEmpty() -> {
+                    Text(
+                        text = "No paired devices found. Pair the vehicle's Bluetooth in your phone's Bluetooth settings first, then retry.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
+                }
+                else -> {
+                    pairedDevices.forEach { device ->
+                        val deviceName = try {
+                            device.name ?: device.address
+                        } catch (e: SecurityException) {
+                            device.address
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onDeviceSelected(device) }
+                                .padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = selectedDevice?.address == device.address,
+                                onClick = { onDeviceSelected(device) }
+                            )
+                            Column {
+                                Text(
+                                    text = deviceName,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                Text(
+                                    text = device.address,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            TextButton(
+                onClick = onRetry,
+                modifier = Modifier.padding(top = 4.dp)
+            ) {
+                Text("Retry", style = MaterialTheme.typography.labelLarge)
+            }
+
+            OutlinedTextField(
+                value = manualMacAddress,
+                onValueChange = onManualMacChange,
+                label = { Text("Or enter MAC address manually (testing only)") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp)
+            )
+
+            OutlinedTextField(
+                value = vehicleName,
+                onValueChange = onVehicleNameChange,
+                label = { Text("Vehicle name") },
+                enabled = selectedDevice != null || manualMacAddress.isNotBlank(),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp)
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 20.dp),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(onClick = onCancel) {
+                    Text("Cancel")
+                }
+                Button(
+                    onClick = onSave,
+                    enabled = driverName.isNotBlank() && vehicleName.isNotBlank() &&
+                            (selectedDevice != null || manualMacAddress.isNotBlank()),
+                    modifier = Modifier.padding(start = 8.dp)
+                ) {
+                    Text(saveLabel)
+                }
+            }
+        }
     }
 }
