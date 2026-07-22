@@ -65,7 +65,8 @@ fun SetupHomeScreen(
     onNavigateToWorkingDays: () -> Unit = {},
     onNavigateToDriversVehicles: () -> Unit = {},
     onNavigateToLocation: () -> Unit = {},
-    onNavigateToRideHistory: () -> Unit = {}
+    onNavigateToRideHistory: () -> Unit = {},
+    onNavigateToDevTools: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val database = remember { GhostRideDatabase.getInstance(context) }
@@ -156,6 +157,14 @@ fun SetupHomeScreen(
             Text(
                 text = "View Ride History →",
                 style = MaterialTheme.typography.labelLarge
+            )
+        }
+
+        TextButton(onClick = onNavigateToDevTools) {
+            Text(
+                text = "Dev Tools (testing)",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
             )
         }
     }

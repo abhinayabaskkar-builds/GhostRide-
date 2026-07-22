@@ -51,7 +51,8 @@ fun GhostRideNavigation(
                 onNavigateToWorkingDays = { navController.navigate(Routes.WORKING_DAYS) },
                 onNavigateToDriversVehicles = { navController.navigate(Routes.DRIVERS_VEHICLES) },
                 onNavigateToLocation = { navController.navigate(Routes.LOCATION) },
-                onNavigateToRideHistory = { navController.navigate(Routes.RIDE_HISTORY) }
+                onNavigateToRideHistory = { navController.navigate(Routes.RIDE_HISTORY) },
+                onNavigateToDevTools = { navController.navigate(Routes.DEV_TOOLS) }
             )
         }
         composable(Routes.WORKING_DAYS) {
